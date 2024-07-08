@@ -650,10 +650,9 @@ function enqueue_labs_assets() {
 }
 add_action('wp_enqueue_scripts', 'enqueue_labs_assets');
 
-
 // Ajouter les champs personnalisés ACF pour les laboratoires
 function add_acf_fields_for_labs() {
-    if( function_exists('acf_add_local_field_group') ) {
+    if (function_exists('acf_add_local_field_group')) {
         acf_add_local_field_group(array(
             'key' => 'group_labs',
             'title' => 'Labs',
@@ -720,7 +719,7 @@ function add_acf_fields_for_labs() {
                     'label' => 'Logo',
                     'name' => 'lab_logo',
                     'type' => 'image',
-                    'return_format' => 'url',
+                    'return_format' => 'id',
                 ),
             ),
             'location' => array(
@@ -738,24 +737,25 @@ function add_acf_fields_for_labs() {
 add_action('acf/init', 'add_acf_fields_for_labs');
 
 // Afficher les laboratoires
+// Afficher les laboratoires
 function display_labs_shortcode() {
     ob_start();
     ?>
     <div class="header">
         <div class="header-left">
             <div class="main-title">
-                <img src="https://teachmemore.fr/wp-content/uploads/2024/06/icons8-cloud-480.png" alt="Logo">
+                <img src="https://teachmemore.fr/wp-content/uploads/2024/07/icons8-chimiste-96.png" alt="Logo">
                 Hands-on Labs
             </div>
-            <?php if ( current_user_can('manage_options') ) : ?>
+            <?php if (current_user_can('manage_options')) : ?>
                 <button class="add-lab" onclick="toggleForm()">+</button>
             <?php endif; ?>
         </div>
         <div class="search-bar-container">
             <div class="search-bar">
                 <input type="text" id="search" placeholder="Browse the Labs Library...">
+                <button id="search-button" onclick="handleSearch()">Search</button>
             </div>
-            <button class="filter-toggle" onclick="toggleFilters()">Filters</button>
         </div>
     </div>
     <div class="content">
@@ -796,7 +796,7 @@ function display_labs_shortcode() {
                 </div>
             </div>
         </div>
-        <div class="form-container" id="form-container">
+        <div class="form-container" id="form-container" style="display: none;">
             <div class="form-group">
                 <label for="lab-title">Titre</label>
                 <input type="text" id="lab-title" placeholder="Entrez le titre du lab">
@@ -855,6 +855,82 @@ function display_labs_shortcode() {
             <!-- Les laboratoires seront chargés ici -->
         </div>
     </div>
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            console.log('Document ready');
+            window.toggleForm = function() {
+                document.getElementById('form-container').classList.toggle('hidden');
+            };
+
+            window.handleSearch = function() {
+                var searchTerm = document.getElementById('search').value;
+                console.log('Search term:', searchTerm);
+                if (!searchTerm) {
+                    console.log("Please enter a term to search or clearing search will show all labs.");
+                    loadLabsFromServer(); // Reload all labs if search is cleared or empty
+                    return;
+                }
+
+                fetch('/wp-json/labs/v1/get?search=' + searchTerm)
+                    .then(response => response.json())
+                    .then(response => {
+                        console.log('Labs received:', response);
+                        var labsList = document.getElementById('labs-list');
+                        labsList.innerHTML = ''; // Clear existing labs
+                        if (response && response.length > 0) {
+                            response.forEach(function(lab) {
+                                addLabToPage(lab);
+                            });
+                        } else {
+                            console.log("No labs found matching your criteria.");
+                            labsList.innerHTML = '<p>No labs found.</p>'; // Display not found message
+                        }
+                    })
+                    .catch(error => {
+                        console.error("Error retrieving labs:", error);
+                    });
+            };
+
+            function addLabToPage(lab) {
+                var logoURL = lab.logo ? lab.logo : 'https://teachmemore.fr/wp-content/uploads/2024/07/icons8-chimiste-96.png'; // Fallback image URL
+                var labItem = document.createElement('div');
+                labItem.className = 'lab-item';
+                labItem.setAttribute('data-id', lab.id);
+                labItem.innerHTML = `
+                    <img src="${logoURL}" alt="${lab.technology} logo">
+                    <div>
+                        <h3>${lab.title}</h3>
+                        <p>${lab.description}</p>
+                        <div class="details">
+                            <span> 🟢 ${lab.technology}</span>
+                            <span> 🟢 ${lab.level}</span>
+                            <span> 🕒 ${lab.duration} mins</span>
+                        </div>
+                    </div>
+                `;
+                document.getElementById('labs-list').appendChild(labItem);
+            }
+
+            function loadLabsFromServer() {
+                fetch('/wp-json/labs/v1/get')
+                    .then(response => response.json())
+                    .then(response => {
+                        console.log('Labs loaded from server:', response);
+                        var labsList = document.getElementById('labs-list');
+                        labsList.innerHTML = ''; // Clear existing labs
+                        response.forEach(function(lab) {
+                            addLabToPage(lab);
+                        });
+                    })
+                    .catch(error => {
+                        console.error("Error loading labs:", error);
+                        document.getElementById('labs-list').innerHTML = '<p>Error loading labs.</p>';
+                    });
+            }
+
+            loadLabsFromServer(); // Call this function to load labs when the page is ready
+        });
+    </script>
     <?php
     $output = ob_get_clean();
     return $output;
@@ -866,7 +942,9 @@ add_action('rest_api_init', function() {
     register_rest_route('labs/v1', '/add', array(
         'methods' => 'POST',
         'callback' => 'add_lab',
-        'permission_callback' => '__return_true',
+        'permission_callback' => function () {
+            return current_user_can('edit_posts');
+        }
     ));
 
     register_rest_route('labs/v1', '/get', array(
@@ -878,49 +956,53 @@ add_action('rest_api_init', function() {
     register_rest_route('labs/v1', '/update', array(
         'methods' => 'POST',
         'callback' => 'update_lab',
-        'permission_callback' => '__return_true',
+        'permission_callback' => function () {
+            return current_user_can('edit_posts');
+        }
     ));
 
     register_rest_route('labs/v1', '/delete', array(
         'methods' => 'POST',
         'callback' => 'delete_lab',
-        'permission_callback' => '__return_true',
+        'permission_callback' => function () {
+            return current_user_can('delete_posts');
+        }
     ));
 });
 
+function handle_lab_image_upload($post_id, $params) {
+    if (!empty($_FILES['lab-logo']['name'])) {
+        require_once(ABSPATH . 'wp-admin/includes/image.php');
+        require_once(ABSPATH . 'wp-admin/includes/file.php');
+        require_once(ABSPATH . 'wp-admin/includes/media.php');
 
-function handle_lab_image_upload($post_id, $file_input_name = 'lab-logo') {
-    require_once(ABSPATH . 'wp-admin/includes/image.php');
-    require_once(ABSPATH . 'wp-admin/includes/file.php');
-    require_once(ABSPATH . 'wp-admin/includes/media.php');
-
-    // Handle the upload of the file
-    $attachment_id = media_handle_upload($file_input_name, $post_id);
-
-    if (is_wp_error($attachment_id)) {
-        // Handle errors
-        error_log('Erreur lors du téléchargement du fichier : ' . $attachment_id->get_error_message());
-        return false;
+        $attachment_id = media_handle_upload('lab-logo', $post_id);
+        if (is_wp_error($attachment_id)) {
+            error_log('Error uploading image: ' . $attachment_id->get_error_message());
+            return false;
+        }
+        update_field('field_lab_logo', $attachment_id, $post_id);
+        return true;
+    } elseif (!empty($params['logo_url'])) {
+        update_post_meta($post_id, '_lab_logo_url', sanitize_text_field($params['logo_url']));
+        return true;
     }
-
-    // If the upload was successful, save the attachment ID in a custom field
-    update_field('field_lab_logo', $attachment_id, $post_id);
-
-    return wp_get_attachment_url($attachment_id);
+    return false;
 }
-
 
 function add_lab($data) {
     $params = $data->get_params();
 
     $post_id = wp_insert_post(array(
         'post_title' => sanitize_text_field($params['title']),
-        'post_type' => 'lab',
+        'post_content' => '',
         'post_status' => 'publish',
+        'post_type' => 'lab'
     ));
 
     if (is_wp_error($post_id)) {
-        return $post_id;
+        error_log('Error creating lab: ' . $post_id->get_error_message());
+        return new WP_Error('lab_error', 'Error creating lab', array('status' => 500));
     }
 
     update_field('lab_title', $params['title'], $post_id);
@@ -930,24 +1012,67 @@ function add_lab($data) {
     update_field('lab_domain', $params['domain'], $post_id);
     update_field('lab_duration', $params['duration'], $post_id);
 
-    // Handling image upload
-    if (isset($_FILES['lab-logo'])) {
-        handle_lab_image_upload($post_id, 'lab-logo');
-    }
+    handle_lab_image_upload($post_id, $params);
 
-    return new WP_REST_Response('Laboratoire ajouté', 200);
+    return new WP_REST_Response('Lab added successfully', 200);
+}
+
+function update_lab($data) {
+    $params = $data->get_params();
+    $post_id = intval($params['id']);
+
+    wp_update_post(array(
+        'ID' => $post_id,
+        'post_title' => sanitize_text_field($params['title']),
+    ));
+
+    update_field('lab_title', $params['title'], $post_id);
+    update_field('lab_description', $params['description'], $post_id);
+    update_field('lab_technology', $params['technology'], $post_id);
+    update_field('lab_level', $params['level'], $post_id);
+    update_field('lab_domain', $params['domain'], $post_id);
+    update_field('lab_duration', $params['duration'], $post_id);
+
+    handle_lab_image_upload($post_id, $params);
+
+    return new WP_REST_Response('Lab updated successfully', 200);
 }
 
 function get_labs() {
-    $labs = get_posts(array(
+    error_log('get_labs called');
+    $args = [
         'post_type' => 'lab',
         'post_status' => 'publish',
         'numberposts' => -1,
-    ));
+        's' => isset($_GET['search']) ? $_GET['search'] : '',  // Search parameter
+        'meta_query' => [
+            'relation' => 'AND',
+            // Technology filter
+            [
+                'key' => 'lab_technology',
+                'value' => isset($_GET['technology']) && $_GET['technology'] !== '' ? $_GET['technology'] : '',
+                'compare' => 'LIKE'
+            ],
+            // Level filter
+            [
+                'key' => 'lab_level',
+                'value' => isset($_GET['level']) && $_GET['level'] !== '' ? $_GET['level'] : '',
+                'compare' => 'LIKE'
+            ],
+            // Domain filter
+            [
+                'key' => 'lab_domain',
+                'value' => isset($_GET['domain']) && $_GET['domain'] !== '' ? $_GET['domain'] : '',
+                'compare' => 'LIKE'
+            ]
+        ]
+    ];
+    $labs = get_posts($args);
+    error_log('Labs found: ' . count($labs));
 
     $response = array();
-
     foreach ($labs as $lab) {
+        $logo_url = wp_get_attachment_url(get_field('lab_logo', $lab->ID));
         $response[] = array(
             'id' => $lab->ID,
             'title' => get_field('lab_title', $lab->ID),
@@ -956,41 +1081,11 @@ function get_labs() {
             'level' => get_field('lab_level', $lab->ID),
             'domain' => get_field('lab_domain', $lab->ID),
             'duration' => get_field('lab_duration', $lab->ID),
-            'logo' => get_field('lab_logo', $lab->ID),
+            'logo' => $logo_url ? $logo_url : 'https://example.com/path/to/default-image.png'
         );
     }
 
     return new WP_REST_Response($response, 200);
 }
 
-function update_lab($data) {
-    $params = $data->get_params();
-
-    $post_id = intval($params['id']);
-
-    wp_update_post(array(
-        'ID' => $post_id,
-        'post_title' => sanitize_text_field($params['title']),
-    ));
-
-    update_field('lab_title', sanitize_text_field($params['title']), $post_id);
-    update_field('lab_description', sanitize_textarea_field($params['description']), $post_id);
-    update_field('lab_technology', sanitize_text_field($params['technology']), $post_id);
-    update_field('lab_level', sanitize_text_field($params['level']), $post_id);
-    update_field('lab_domain', sanitize_text_field($params['domain']), $post_id);
-    update_field('lab_duration', intval($params['duration']), $post_id);
-    update_field('lab_logo', esc_url_raw($params['logo']), $post_id);
-
-    return new WP_REST_Response('Laboratoire mis à jour', 200);
-}
-
-function delete_lab($data) {
-    $params = $data->get_params();
-    $post_id = intval($params['id']);
-
-    wp_delete_post($post_id, true);
-
-    return new WP_REST_Response('Laboratoire supprimé', 200);
-	
-}
 
