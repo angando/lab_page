@@ -1,113 +1,80 @@
 jQuery(document).ready(function($) {
-    // Function to toggle the visibility of the form
+    console.log('Document ready');
+    // Toggle the visibility of the form
     window.toggleForm = function() {
-        var formContainer = $('#form-container');
-        formContainer.toggle();
+        $('#form-container').toggle();
     };
 
-    // Function to save or update lab information
-    window.saveLab = function() {
-        var id = $('#lab-id').val();
-        var title = $('#lab-title').val();
-        var description = $('#lab-description').val();
-        var technology = $('#lab-technology').val();
-        var level = $('#lab-level').val();
-        var domain = $('#lab-domain').val();
-        var duration = $('#lab-duration').val();
-        var logo = $('#lab-logo')[0].files[0];
-
-        var formData = new FormData();
-        formData.append('id', id);
-        formData.append('title', title);
-        formData.append('description', description);
-        formData.append('technology', technology);
-        formData.append('level', level);
-        formData.append('domain', domain);
-        formData.append('duration', duration);
-        if (logo) {
-            formData.append('logo', logo);
+    // Handle the search functionality when the search button is clicked
+    window.handleSearch = function() {
+        var searchTerm = $('#search').val();
+        console.log('Search term:', searchTerm);
+        if (!searchTerm) {
+            console.log("Please enter a term to search or clearing search will show all labs.");
+            loadLabsFromServer(); // Reload all labs if search is cleared or empty
+            return;
         }
 
+        // Fetch data from the server using the search term
         $.ajax({
-            url: '/wp-json/labs/v1/' + (id ? 'update' : 'add'),
-            method: 'POST',
-            data: formData,
-            contentType: false,
-            processData: false,
+            url: '/wp-json/labs/v1/get',
+            method: 'GET',
+            data: { search: searchTerm },
             success: function(response) {
-                console.log('Lab saved successfully', response);
-                toggleForm();
-                loadLabsFromServer(); // Reload labs to reflect the new changes
+                console.log('Labs received:', response);
+                $('#labs-list').empty(); // Clear existing labs
+                if (response && response.length > 0) {
+                    response.forEach(function(lab) {
+                        addLabToPage(lab);
+                    });
+                } else {
+                    console.log("No labs found matching your criteria.");
+                    $('#labs-list').html('<p>No labs found.</p>'); // Display not found message
+                }
             },
-            error: function(error) {
-                console.error('Error saving lab', error);
+            error: function() {
+                console.error("Error retrieving labs.");
             }
         });
     };
 
-    // Function to delete a lab
-    window.deleteLab = function(id) {
-        $.ajax({
-            url: '/wp-json/labs/v1/delete',
-            method: 'POST',
-            data: { id: id },
-            success: function(response) {
-                console.log('Lab deleted successfully', response);
-                $('div[data-id="' + id + '"]').remove(); // Remove the lab from the page
-            },
-            error: function(error) {
-                console.error('Error deleting lab', error);
-            }
-        });
-    };
+    // Function to add a single lab to the page
+    function addLabToPage(lab) {
+        var logoURL = lab.logo ? lab.logo : 'https://example.com/path/to/default-image.png'; // Fallback image URL
+        var labItem = $('<div>').addClass('lab-item').attr('data-id', lab.id);
+        labItem.html(`
+            <img src="${logoURL}" alt="${lab.technology} logo">
+            <div>
+                <h3>${lab.title}</h3>
+                <p>${lab.description}</p>
+                <div class="details">
+                    <span> 🟢 ${lab.technology}</span>
+                    <span> 🟢 ${lab.level}</span>
+                    <span> 🕒 ${lab.duration} mins</span>
+                </div>
+            </div>
+        `);
+        $('#labs-list').append(labItem);
+    }
 
-    // Function to toggle the visibility of the filters
-    window.toggleFilters = function() {
-        $('.filters').toggle();
-    };
-
-    // Function to load labs from the server and add them to the page
+    // Load labs initially to populate the page
     function loadLabsFromServer() {
         $.ajax({
             url: '/wp-json/labs/v1/get',
             method: 'GET',
             success: function(response) {
-                $('#labs-list').empty(); // Clear the current labs
+                console.log('Labs loaded from server:', response);
+                $('#labs-list').empty(); // Clear existing labs
                 response.forEach(function(lab) {
                     addLabToPage(lab);
                 });
             },
-            error: function(error) {
-                console.error('Error loading labs', error);
+            error: function() {
+                console.error("Error loading labs.");
+                $('#labs-list').html('<p>Error loading labs.</p>');
             }
         });
     }
 
-    // Function to add a single lab to the page
-function addLabToPage(lab) {
-    var labItem = $('<div>').addClass('lab-item').attr('data-id', lab.id).attr('data-tech', lab.technology).attr('data-level', lab.level).attr('data-domain', lab.domain);
-    labItem.html(
-        `<img src="${lab.logo}" alt="${lab.technology} logo">
-        <div>
-            <h3>${lab.title}</h3>
-            <p>${lab.description}</p>
-            <div class="details">
-                <span>🟢 ${lab.technology}</span>
-                <span>🟢 ${lab.level}</span>
-                <span>🕒 ${lab.duration} mins</span>
-            </div>
-            <div class="menu">
-                &#x22EE;
-                <div class="menu-options" style="display: none;">
-                    <div onclick="window.editLab(${lab.id})">Modifier</div>
-                    <div onclick="window.deleteLab(${lab.id})">Supprimer</div>
-                </div>
-            </div>
-        </div>`
-    );
-    $('#labs-list').append(labItem);
-}
-
-    // Call to load labs when the page is ready
-    loadLabsFromServer();
+    loadLabsFromServer(); // Call this function to load labs when the page is ready
 });
