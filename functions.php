@@ -1039,7 +1039,6 @@ function update_lab($data) {
 }
 
 function get_labs() {
-    error_log('get_labs called');
     $args = [
         'post_type' => 'lab',
         'post_status' => 'publish',
@@ -1068,11 +1067,11 @@ function get_labs() {
         ]
     ];
     $labs = get_posts($args);
-    error_log('Labs found: ' . count($labs));
 
     $response = array();
     foreach ($labs as $lab) {
         $logo_url = wp_get_attachment_url(get_field('lab_logo', $lab->ID));
+        $paid_page_url = get_field('lab_paid_page_url', $lab->ID);
         $response[] = array(
             'id' => $lab->ID,
             'title' => get_field('lab_title', $lab->ID),
@@ -1081,11 +1080,10 @@ function get_labs() {
             'level' => get_field('lab_level', $lab->ID),
             'domain' => get_field('lab_domain', $lab->ID),
             'duration' => get_field('lab_duration', $lab->ID),
-            'logo' => $logo_url ? $logo_url : 'https://example.com/path/to/default-image.png'
+            'logo' => $logo_url ? $logo_url : 'https://example.com/path/to/default-image.png',
+            'paid_page_url' => $paid_page_url,
         );
     }
 
     return new WP_REST_Response($response, 200);
 }
-
-
