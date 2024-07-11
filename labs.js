@@ -1,8 +1,15 @@
 jQuery(document).ready(function($) {
     console.log('Document ready');
+
     // Toggle the visibility of the form
     window.toggleForm = function() {
         $('#form-container').toggle();
+    };
+
+    // Toggle the visibility of the filter container
+    window.toggleFilters = function() {
+        var filterContainer = document.getElementById('filter-container');
+        filterContainer.style.display = filterContainer.style.display === 'none' ? 'block' : 'none';
     };
 
     // Handle the search functionality when the search button is clicked
@@ -32,8 +39,9 @@ jQuery(document).ready(function($) {
                     $('#labs-list').html('<p>No labs found.</p>'); // Display not found message
                 }
             },
-            error: function() {
-                console.error("Error retrieving labs.");
+            error: function(jqXHR, textStatus, errorThrown) {
+                console.error("Error retrieving labs:", textStatus, errorThrown);
+                $('#labs-list').html('<p>Error retrieving labs.</p>'); // Display error message
             }
         });
     };
@@ -69,12 +77,39 @@ jQuery(document).ready(function($) {
                     addLabToPage(lab);
                 });
             },
-            error: function() {
-                console.error("Error loading labs.");
+            error: function(jqXHR, textStatus, errorThrown) {
+                console.error("Error loading labs:", textStatus, errorThrown);
                 $('#labs-list').html('<p>Error loading labs.</p>');
             }
         });
     }
 
-    loadLabsFromServer(); // Call this function to load labs when the page is ready
+    window.filterLabs = function() {
+        var technology = document.getElementById('technology').value;
+        var level = document.getElementById('skill-level').value;
+        var domain = document.getElementById('domain').value;
+
+        fetch(`/wp-json/labs/v1/get?technology=${technology}&level=${level}&domain=${domain}`)
+            .then(response => response.json())
+            .then(response => {
+                console.log('Labs received:', response);
+                var labsList = document.getElementById('labs-list');
+                labsList.innerHTML = ''; // Clear existing labs
+                if (response && response.length > 0) {
+                    response.forEach(function(lab) {
+                        addLabToPage(lab);
+                    });
+                } else {
+                    console.log("No labs found matching your criteria.");
+                    labsList.innerHTML = '<p>No labs found.</p>'; // Display not found message
+                }
+            })
+            .catch(error => {
+                console.error("Error retrieving labs:", error);
+                document.getElementById('labs-list').innerHTML = '<p>Error retrieving labs.</p>'; // Display error message
+            });
+    };
+
+    // Initial call to load all labs when the page is ready
+    loadLabsFromServer();
 });
